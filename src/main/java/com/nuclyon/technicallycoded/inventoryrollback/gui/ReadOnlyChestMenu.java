@@ -14,6 +14,7 @@ import net.minecraft.world.item.ItemStack;
 public class ReadOnlyChestMenu extends ChestMenu {
     private final Runnable onClose;
     private final boolean allowInteraction;
+    private boolean skipOnClose = false;
 
     public ReadOnlyChestMenu(MenuType<?> type, int containerId, Inventory playerInventory, Container container, int rows, Runnable onClose, boolean allowInteraction) {
         super(type, containerId, playerInventory, container, rows);
@@ -26,7 +27,27 @@ public class ReadOnlyChestMenu extends ChestMenu {
     }
 
     @Override
+    public ItemStack quickMoveStack(Player player, int index) {
+        if (!allowInteraction) {
+            return ItemStack.EMPTY; // No shift-clicking in list menu
+        }
+        
+        // Prevent shift-clicking items from player inventory (>= 54) into the backup GUI
+        if (index >= 54) {
+            return ItemStack.EMPTY;
+        }
+        
+        return super.quickMoveStack(player, index);
+    }
+
+    @Override
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
+        // Always allow interacting with own inventory or dropping outside
+        if (slotId >= 54 || slotId == -999) {
+            super.clicked(slotId, button, clickType, player);
+            return;
+        }
+
         if (!allowInteraction) {
             handleCustomClick(slotId, button, clickType, player);
             return;
@@ -38,10 +59,6 @@ public class ReadOnlyChestMenu extends ChestMenu {
             super.clicked(slotId, button, clickType, player);
         } else if (slotId >= 45 && slotId < 54) {
             handleCustomClick(slotId, button, clickType, player);
-        } else {
-            if (slotId == -999) {
-                super.clicked(slotId, button, clickType, player);
-            }
         }
     }
 
@@ -54,15 +71,15 @@ public class ReadOnlyChestMenu extends ChestMenu {
         return true;
     }
 
-    @Override
-    public ItemStack quickMoveStack(Player player, int index) {
-        return ItemStack.EMPTY;
+
+    public void setSkipOnClose(boolean skipOnClose) {
+        this.skipOnClose = skipOnClose;
     }
-    
+
     @Override
     public void removed(Player player) {
         super.removed(player);
-        if (this.onClose != null) {
+        if (!skipOnClose && this.onClose != null) {
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.getServer().execute(this.onClose);
             }

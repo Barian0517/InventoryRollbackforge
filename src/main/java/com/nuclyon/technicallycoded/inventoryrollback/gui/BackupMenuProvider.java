@@ -55,18 +55,15 @@ public class BackupMenuProvider implements MenuProvider {
             else if (backup.logType == LogType.QUIT) icon = new ItemStack(Items.REDSTONE);
             else if (backup.logType == LogType.WORLD_CHANGE) icon = new ItemStack(Items.ENDER_PEARL);
             
-            icon.setHoverName(Component.literal("§e" + backup.logType.name()));
+            icon.setHoverName(Component.literal("§e§l" + backup.logType.name()).withStyle(net.minecraft.network.chat.Style.EMPTY.withItalic(false)));
             
-            CompoundTag tag = icon.getOrCreateTag();
-            CompoundTag display = new CompoundTag();
+            CompoundTag display = icon.getOrCreateTagElement("display");
             ListTag lore = new ListTag();
             lore.add(StringTag.valueOf("[{\"text\":\"§7Time: §f" + sdf.format(new Date(backup.timestamp)) + "\"}]"));
             if (backup.deathReason != null) {
                 lore.add(StringTag.valueOf("[{\"text\":\"§7Reason: §c" + backup.deathReason + "\"}]"));
             }
             display.put("Lore", lore);
-            tag.put("display", display);
-            icon.setTag(tag);
             
             container.setItem(slot, icon);
             slot++;
@@ -81,7 +78,7 @@ public class BackupMenuProvider implements MenuProvider {
                     PlayerDataSnapshot selectedBackup = backups.get(slotId);
                     if (player instanceof ServerPlayer serverPlayer) {
                         com.nuclyon.technicallycoded.inventoryrollback.InventoryRollbackPlus.LOGGER.info("Opening BackupViewMenuProvider for backup at " + selectedBackup.timestamp);
-                        serverPlayer.openMenu(new BackupViewMenuProvider(selectedBackup, targetUUID, targetName, () -> {
+                        serverPlayer.openMenu(new BackupViewMenuProvider(selectedBackup, targetUUID, targetName, false, () -> {
                             openMenu(serverPlayer, targetUUID, targetName);
                         }));
                     }

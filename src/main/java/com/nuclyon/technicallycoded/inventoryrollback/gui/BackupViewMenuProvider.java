@@ -17,42 +17,53 @@ public class BackupViewMenuProvider implements MenuProvider {
     private final PlayerDataSnapshot snapshot;
     private final UUID targetUUID;
     private final String targetName;
+    private final boolean isEnderChest;
     private final Runnable onBack;
 
-    public BackupViewMenuProvider(PlayerDataSnapshot snapshot, UUID targetUUID, String targetName, Runnable onBack) {
+    public BackupViewMenuProvider(PlayerDataSnapshot snapshot, UUID targetUUID, String targetName, boolean isEnderChest, Runnable onBack) {
         this.snapshot = snapshot;
         this.targetUUID = targetUUID;
         this.targetName = targetName;
+        this.isEnderChest = isEnderChest;
         this.onBack = onBack;
     }
 
     @Override
     public Component getDisplayName() {
-        return Component.literal("View: " + targetName);
+        return Component.literal(isEnderChest ? "Ender Chest: " + targetName : "Backup: " + targetName);
     }
 
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
         SimpleContainer container = new SimpleContainer(54); // 6 rows
         
-        // Slots 0-35: Main Inventory
-        for (int i = 0; i < 36; i++) {
-            if (i < snapshot.mainInventory.size()) {
-                container.setItem(i, snapshot.mainInventory.get(i).copy());
+        if (isEnderChest) {
+            for (int i = 0; i < snapshot.enderChest.size() && i < 27; i++) {
+                if (!snapshot.enderChest.get(i).isEmpty()) {
+                    container.setItem(i, snapshot.enderChest.get(i).copy());
+                }
+            }
+        } else {
+            // Populate container with backup items
+            for (int i = 0; i < snapshot.mainInventory.size() && i < 36; i++) {
+                if (!snapshot.mainInventory.get(i).isEmpty()) {
+                    container.setItem(i, snapshot.mainInventory.get(i).copy());
+                }
+            }
+            // Armor (41-44 typically in Bukkit UI, let's place them backward from 44)
+            int armorSlot = 44;
+            for (int i = 0; i < snapshot.armor.size() && i < 4; i++) {
+                if (!snapshot.armor.get(i).isEmpty()) {
+                    container.setItem(armorSlot, snapshot.armor.get(i).copy());
+                }
+                armorSlot--;
+            }
+            // Offhand
+            if (snapshot.offhand.size() > 0) {
+                container.setItem(40, snapshot.offhand.get(0).copy());
             }
         }
         
-        // Slots 36-39: Armor
-        for (int i = 0; i < 4; i++) {
-            if (i < snapshot.armor.size()) {
-                container.setItem(36 + i, snapshot.armor.get(i).copy());
-            }
-        }
-        
-        // Slot 40: Offhand
-        if (snapshot.offhand.size() > 0) {
-            container.setItem(40, snapshot.offhand.get(0).copy());
-        }
         // Slot 45: Back
         container.setItem(45, createButton(net.minecraft.world.item.Items.WHITE_BANNER, "§fBack"));
         // Slot 47: Chest Bundle
@@ -61,8 +72,12 @@ public class BackupViewMenuProvider implements MenuProvider {
         container.setItem(48, createButton(net.minecraft.world.item.Items.NETHER_STAR, "§6Restore All Items"));
         // Slot 49: Teleport
         container.setItem(49, createButton(net.minecraft.world.item.Items.ENDER_PEARL, "§dTeleport to Location"));
-        // Slot 50: Ender Chest
-        container.setItem(50, createButton(net.minecraft.world.item.Items.ENDER_CHEST, "§5Ender Chest Backup"));
+        // Slot 50: Ender Chest or Main Inventory switch
+        if (isEnderChest) {
+            container.setItem(50, createButton(net.minecraft.world.item.Items.CHEST, "§6Main Inventory Backup"));
+        } else {
+            container.setItem(50, createButton(net.minecraft.world.item.Items.ENDER_CHEST, "§5Ender Chest Backup"));
+        }
         // Slot 51: Health
         container.setItem(51, createButton(net.minecraft.world.item.Items.GLISTERING_MELON_SLICE, "§cRestore Health"));
         // Slot 52: Hunger
@@ -86,10 +101,17 @@ public class BackupViewMenuProvider implements MenuProvider {
                         break;
                     case 48: // Restore All Items
                         if (targetPlayer != null) {
-                            for (int i = 0; i < 36; i++) targetPlayer.getInventory().items.set(i, i < snapshot.mainInventory.size() ? snapshot.mainInventory.get(i).copy() : ItemStack.EMPTY);
-                            for (int i = 0; i < 4; i++) targetPlayer.getInventory().armor.set(i, i < snapshot.armor.size() ? snapshot.armor.get(i).copy() : ItemStack.EMPTY);
-                            for (int i = 0; i < 1; i++) targetPlayer.getInventory().offhand.set(i, i < snapshot.offhand.size() ? snapshot.offhand.get(i).copy() : ItemStack.EMPTY);
-                            serverPlayer.sendSystemMessage(Component.literal("§aRestored items for " + targetName));
+                            if (isEnderChest) {
+                                for (int i = 0; i < 27; i++) {
+                                    targetPlayer.getEnderChestInventory().setItem(i, i < snapshot.enderChest.size() ? snapshot.enderChest.get(i).copy() : ItemStack.EMPTY);
+                                }
+                                serverPlayer.sendSystemMessage(Component.literal("§aRestored Ender Chest for " + targetName));
+                            } else {
+                                for (int i = 0; i < 36; i++) targetPlayer.getInventory().items.set(i, i < snapshot.mainInventory.size() ? snapshot.mainInventory.get(i).copy() : ItemStack.EMPTY);
+                                for (int i = 0; i < 4; i++) targetPlayer.getInventory().armor.set(i, i < snapshot.armor.size() ? snapshot.armor.get(i).copy() : ItemStack.EMPTY);
+                                for (int i = 0; i < 1; i++) targetPlayer.getInventory().offhand.set(i, i < snapshot.offhand.size() ? snapshot.offhand.get(i).copy() : ItemStack.EMPTY);
+                                serverPlayer.sendSystemMessage(Component.literal("§aRestored items for " + targetName));
+                            }
                         } else {
                             serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
                         }
@@ -109,7 +131,10 @@ public class BackupViewMenuProvider implements MenuProvider {
                         }
                         break;
                     case 50: // Ender Chest (WIP)
-                        serverPlayer.sendSystemMessage(Component.literal("§eEnder Chest backup feature coming soon."));
+                        if (player.containerMenu instanceof ReadOnlyChestMenu menu) {
+                            menu.setSkipOnClose(true);
+                        }
+                        serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, !isEnderChest, onBack));
                         break;
                     case 51: // Health
                         if (targetPlayer != null) {
@@ -164,7 +189,10 @@ public class BackupViewMenuProvider implements MenuProvider {
         net.minecraft.nbt.ListTag itemsList = new net.minecraft.nbt.ListTag();
         
         int slot = 0;
-        for (ItemStack item : snapshot.mainInventory) {
+        
+        java.util.List<ItemStack> itemsToBundle = isEnderChest ? snapshot.enderChest : snapshot.mainInventory;
+        
+        for (ItemStack item : itemsToBundle) {
             if (!item.isEmpty()) {
                 net.minecraft.nbt.CompoundTag itemTag = new net.minecraft.nbt.CompoundTag();
                 itemTag.putByte("Slot", (byte) slot);
