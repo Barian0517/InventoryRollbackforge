@@ -20,4 +20,7 @@ InventoryRollbackforge 是一個適用於 Minecraft Forge 1.20.1 的強大備份
 * **Curios API** (可選): 5.14.1+1.20.1
 
 ## 開源與授權
-本專案為自 Bukkit 插件重新架構編寫的 Forge 獨立版本，原始碼遵守開源規範，您可以自由 fork 或參考。
+本專案為自 Bukkit 插件重新架構編寫的 Forge 獨立版本，原始碼遵守 **CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)** 授權條款：
+* 您可以自由地使用、修改與散佈本專案的程式碼。
+* **禁止用於商業營利目的**。
+* 您必須在修改或散佈時，明確標示並歸功於**原作者 (Barian0517)**。
