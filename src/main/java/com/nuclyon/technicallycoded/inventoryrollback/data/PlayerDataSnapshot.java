@@ -16,6 +16,7 @@ public class PlayerDataSnapshot {
     public final NonNullList<ItemStack> armor;
     public final NonNullList<ItemStack> offhand;
     public final NonNullList<ItemStack> enderChest;
+    public final NonNullList<ItemStack> curios;
     
     public final LogType logType;
     public final long timestamp;
@@ -24,6 +25,7 @@ public class PlayerDataSnapshot {
     public PlayerDataSnapshot(float xp, float health, int foodLevel, float saturation, String dimension, 
                               double x, double y, double z, NonNullList<ItemStack> mainInventory, 
                               NonNullList<ItemStack> armor, NonNullList<ItemStack> offhand, NonNullList<ItemStack> enderChest,
+                              NonNullList<ItemStack> curios,
                               LogType logType, long timestamp, String deathReason) {
         this.xp = xp;
         this.health = health;
@@ -37,6 +39,7 @@ public class PlayerDataSnapshot {
         this.armor = armor;
         this.offhand = offhand;
         this.enderChest = enderChest;
+        this.curios = curios;
         this.logType = logType;
         this.timestamp = timestamp;
         this.deathReason = deathReason;
@@ -62,6 +65,7 @@ public class PlayerDataSnapshot {
         tag.put("armor", saveItemList(armor));
         tag.put("offhand", saveItemList(offhand));
         tag.put("enderChest", saveItemList(enderChest));
+        tag.put("curios", saveItemList(curios));
 
         return tag;
     }
@@ -80,6 +84,7 @@ public class PlayerDataSnapshot {
                 loadItemList(tag.getList("armor", 10), 4),
                 loadItemList(tag.getList("offhand", 10), 1),
                 loadItemList(tag.getList("enderChest", 10), 27),
+                tag.contains("curios") ? loadItemList(tag.getList("curios", 10), 0) : NonNullList.create(),
                 LogType.valueOf(tag.getString("logType")),
                 tag.getLong("timestamp"),
                 tag.contains("deathReason") ? tag.getString("deathReason") : null
@@ -100,12 +105,19 @@ public class PlayerDataSnapshot {
         return tagList;
     }
 
-    private static NonNullList<ItemStack> loadItemList(ListTag tagList, int size) {
-        NonNullList<ItemStack> list = NonNullList.withSize(size, ItemStack.EMPTY);
+    private static NonNullList<ItemStack> loadItemList(ListTag tagList, int defaultSize) {
+        int maxSlot = defaultSize - 1;
+        for (int i = 0; i < tagList.size(); i++) {
+            int slot = tagList.getCompound(i).getByte("Slot") & 255;
+            if (slot > maxSlot) {
+                maxSlot = slot;
+            }
+        }
+        NonNullList<ItemStack> list = NonNullList.withSize(maxSlot + 1, ItemStack.EMPTY);
         for (int i = 0; i < tagList.size(); i++) {
             CompoundTag itemTag = tagList.getCompound(i);
             int slot = itemTag.getByte("Slot") & 255;
-            if (slot >= 0 && slot < size) {
+            if (slot >= 0 && slot < list.size()) {
                 list.set(slot, ItemStack.of(itemTag));
             }
         }

@@ -14,33 +14,49 @@ import java.util.UUID;
 
 public class BackupViewMenuProvider implements MenuProvider {
 
+    public enum ViewType { MAIN, ENDER_CHEST, CURIOS }
+
     private final PlayerDataSnapshot snapshot;
     private final UUID targetUUID;
     private final String targetName;
-    private final boolean isEnderChest;
+    private final ViewType viewType;
+    private final int curiosPage;
     private final Runnable onBack;
 
-    public BackupViewMenuProvider(PlayerDataSnapshot snapshot, UUID targetUUID, String targetName, boolean isEnderChest, Runnable onBack) {
+    public BackupViewMenuProvider(PlayerDataSnapshot snapshot, UUID targetUUID, String targetName, ViewType viewType, int curiosPage, Runnable onBack) {
         this.snapshot = snapshot;
         this.targetUUID = targetUUID;
         this.targetName = targetName;
-        this.isEnderChest = isEnderChest;
+        this.viewType = viewType;
+        this.curiosPage = curiosPage;
         this.onBack = onBack;
     }
 
     @Override
     public Component getDisplayName() {
-        return Component.literal(isEnderChest ? "Ender Chest: " + targetName : "Backup: " + targetName);
+        if (viewType == ViewType.ENDER_CHEST) return Component.literal("Ender Chest: " + targetName);
+        if (viewType == ViewType.CURIOS) return Component.literal("Curios (P" + (curiosPage + 1) + "): " + targetName);
+        return Component.literal("Backup: " + targetName);
     }
 
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
         SimpleContainer container = new SimpleContainer(54); // 6 rows
         
-        if (isEnderChest) {
+        if (viewType == ViewType.ENDER_CHEST) {
             for (int i = 0; i < snapshot.enderChest.size() && i < 27; i++) {
                 if (!snapshot.enderChest.get(i).isEmpty()) {
                     container.setItem(i, snapshot.enderChest.get(i).copy());
+                }
+            }
+        } else if (viewType == ViewType.CURIOS) {
+            int startIdx = curiosPage * 45;
+            for (int i = 0; i < 45; i++) {
+                int listIdx = startIdx + i;
+                if (listIdx < snapshot.curios.size()) {
+                    if (!snapshot.curios.get(listIdx).isEmpty()) {
+                        container.setItem(i, snapshot.curios.get(listIdx).copy());
+                    }
                 }
             }
         } else {
@@ -66,24 +82,43 @@ public class BackupViewMenuProvider implements MenuProvider {
         
         // Slot 45: Back
         container.setItem(45, createButton(net.minecraft.world.item.Items.WHITE_BANNER, "§fBack"));
+        
+        // Slot 46: Curios
+        if (viewType == ViewType.CURIOS) {
+            container.setItem(46, createButton(net.minecraft.world.item.Items.CHEST, "§6Main Inventory Backup"));
+        } else {
+            container.setItem(46, createButton(net.minecraft.world.item.Items.GOLD_NUGGET, "§6Curios Backup"));
+        }
+
         // Slot 47: Chest Bundle
         container.setItem(47, createButton(net.minecraft.world.item.Items.CHEST, "§aChest Bundle"));
         // Slot 48: Restore All
         container.setItem(48, createButton(net.minecraft.world.item.Items.NETHER_STAR, "§6Restore All Items"));
         // Slot 49: Teleport
         container.setItem(49, createButton(net.minecraft.world.item.Items.ENDER_PEARL, "§dTeleport to Location"));
-        // Slot 50: Ender Chest or Main Inventory switch
-        if (isEnderChest) {
+        
+        // Slot 50: Ender Chest
+        if (viewType == ViewType.ENDER_CHEST) {
             container.setItem(50, createButton(net.minecraft.world.item.Items.CHEST, "§6Main Inventory Backup"));
         } else {
             container.setItem(50, createButton(net.minecraft.world.item.Items.ENDER_CHEST, "§5Ender Chest Backup"));
         }
-        // Slot 51: Health
-        container.setItem(51, createButton(net.minecraft.world.item.Items.GLISTERING_MELON_SLICE, "§cRestore Health"));
-        // Slot 52: Hunger
-        container.setItem(52, createButton(net.minecraft.world.item.Items.ROTTEN_FLESH, "§eRestore Hunger"));
-        // Slot 53: Experience
-        container.setItem(53, createButton(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, "§aRestore XP"));
+
+        if (viewType == ViewType.CURIOS) {
+            if (curiosPage > 0) {
+                container.setItem(52, createButton(net.minecraft.world.item.Items.ARROW, "§aPrevious Page"));
+            }
+            if ((curiosPage + 1) * 45 < snapshot.curios.size()) {
+                container.setItem(53, createButton(net.minecraft.world.item.Items.ARROW, "§aNext Page"));
+            }
+        } else {
+            // Slot 51: Health
+            container.setItem(51, createButton(net.minecraft.world.item.Items.GLISTERING_MELON_SLICE, "§cRestore Health"));
+            // Slot 52: Hunger
+            container.setItem(52, createButton(net.minecraft.world.item.Items.ROTTEN_FLESH, "§eRestore Hunger"));
+            // Slot 53: Experience
+            container.setItem(53, createButton(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, "§aRestore XP"));
+        }
 
         return new ReadOnlyChestMenu(MenuType.GENERIC_9x6, containerId, playerInventory, container, 6, onBack, true) {
             @Override
@@ -96,16 +131,36 @@ public class BackupViewMenuProvider implements MenuProvider {
                     case 45: // Back
                         serverPlayer.closeContainer(); // triggers onBack
                         break;
+                    case 46: // Curios Switch
+                        if (player.containerMenu instanceof ReadOnlyChestMenu menu) menu.setSkipOnClose(true);
+                        if (viewType == ViewType.CURIOS) {
+                            serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.MAIN, 0, onBack));
+                        } else {
+                            serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.CURIOS, 0, onBack));
+                        }
+                        break;
                     case 47: // Chest Bundle
                         giveChestBundle(serverPlayer);
                         break;
                     case 48: // Restore All Items
                         if (targetPlayer != null) {
-                            if (isEnderChest) {
+                            if (viewType == ViewType.ENDER_CHEST) {
                                 for (int i = 0; i < 27; i++) {
                                     targetPlayer.getEnderChestInventory().setItem(i, i < snapshot.enderChest.size() ? snapshot.enderChest.get(i).copy() : ItemStack.EMPTY);
                                 }
                                 serverPlayer.sendSystemMessage(Component.literal("§aRestored Ender Chest for " + targetName));
+                            } else if (viewType == ViewType.CURIOS) {
+                                if (net.minecraftforge.fml.ModList.get().isLoaded("curios")) {
+                                    top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(targetPlayer).ifPresent(handler -> {
+                                        net.minecraftforge.items.IItemHandlerModifiable equipped = handler.getEquippedCurios();
+                                        for (int i = 0; i < equipped.getSlots() && i < snapshot.curios.size(); i++) {
+                                            equipped.setStackInSlot(i, snapshot.curios.get(i).copy());
+                                        }
+                                    });
+                                    serverPlayer.sendSystemMessage(Component.literal("§aRestored Curios for " + targetName));
+                                } else {
+                                    serverPlayer.sendSystemMessage(Component.literal("§cCurios is not loaded on the server."));
+                                }
                             } else {
                                 for (int i = 0; i < 36; i++) targetPlayer.getInventory().items.set(i, i < snapshot.mainInventory.size() ? snapshot.mainInventory.get(i).copy() : ItemStack.EMPTY);
                                 for (int i = 0; i < 4; i++) targetPlayer.getInventory().armor.set(i, i < snapshot.armor.size() ? snapshot.armor.get(i).copy() : ItemStack.EMPTY);
@@ -130,34 +185,52 @@ public class BackupViewMenuProvider implements MenuProvider {
                             }
                         }
                         break;
-                    case 50: // Ender Chest (WIP)
-                        if (player.containerMenu instanceof ReadOnlyChestMenu menu) {
-                            menu.setSkipOnClose(true);
+                    case 50: // Ender Chest Switch
+                        if (player.containerMenu instanceof ReadOnlyChestMenu menu) menu.setSkipOnClose(true);
+                        if (viewType == ViewType.ENDER_CHEST) {
+                            serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.MAIN, 0, onBack));
+                        } else {
+                            serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.ENDER_CHEST, 0, onBack));
                         }
-                        serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, !isEnderChest, onBack));
                         break;
                     case 51: // Health
-                        if (targetPlayer != null) {
-                            targetPlayer.setHealth(snapshot.health);
-                            serverPlayer.sendSystemMessage(Component.literal("§aRestored health for " + targetName));
-                        } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                        if (viewType != ViewType.CURIOS) {
+                            if (targetPlayer != null) {
+                                targetPlayer.setHealth(snapshot.health);
+                                serverPlayer.sendSystemMessage(Component.literal("§aRestored health for " + targetName));
+                            } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                        }
                         break;
-                    case 52: // Hunger
-                        if (targetPlayer != null) {
-                            targetPlayer.getFoodData().setFoodLevel(snapshot.foodLevel);
-                            targetPlayer.getFoodData().setSaturation(snapshot.saturation);
-                            serverPlayer.sendSystemMessage(Component.literal("§aRestored hunger for " + targetName));
-                        } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                    case 52: // Hunger or Previous Page
+                        if (viewType == ViewType.CURIOS) {
+                            if (curiosPage > 0) {
+                                if (player.containerMenu instanceof ReadOnlyChestMenu menu) menu.setSkipOnClose(true);
+                                serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.CURIOS, curiosPage - 1, onBack));
+                            }
+                        } else {
+                            if (targetPlayer != null) {
+                                targetPlayer.getFoodData().setFoodLevel(snapshot.foodLevel);
+                                targetPlayer.getFoodData().setSaturation(snapshot.saturation);
+                                serverPlayer.sendSystemMessage(Component.literal("§aRestored hunger for " + targetName));
+                            } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                        }
                         break;
-                    case 53: // Experience
-                        if (targetPlayer != null) {
-                            // Reset xp before adding
-                            targetPlayer.experienceProgress = 0.0f;
-                            targetPlayer.experienceLevel = 0;
-                            targetPlayer.totalExperience = 0;
-                            targetPlayer.giveExperiencePoints((int)snapshot.xp); // Rough approximation of total xp
-                            serverPlayer.sendSystemMessage(Component.literal("§aRestored XP for " + targetName));
-                        } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                    case 53: // Experience or Next Page
+                        if (viewType == ViewType.CURIOS) {
+                            if ((curiosPage + 1) * 45 < snapshot.curios.size()) {
+                                if (player.containerMenu instanceof ReadOnlyChestMenu menu) menu.setSkipOnClose(true);
+                                serverPlayer.openMenu(new BackupViewMenuProvider(snapshot, targetUUID, targetName, ViewType.CURIOS, curiosPage + 1, onBack));
+                            }
+                        } else {
+                            if (targetPlayer != null) {
+                                int level = (int) snapshot.xp;
+                                float progress = snapshot.xp - level;
+                                targetPlayer.experienceLevel = level;
+                                targetPlayer.experienceProgress = progress;
+                                targetPlayer.totalExperience = 0; // Optional reset
+                                serverPlayer.sendSystemMessage(Component.literal("§aRestored XP for " + targetName));
+                            } else serverPlayer.sendSystemMessage(Component.literal("§cPlayer is offline."));
+                        }
                         break;
                 }
             }
@@ -174,11 +247,9 @@ public class BackupViewMenuProvider implements MenuProvider {
         ItemStack chest = new ItemStack(net.minecraft.world.item.Items.CHEST);
         chest.setHoverName(Component.literal("§e§l⭐ Backup Bundle: " + targetName + " ⭐").withStyle(net.minecraft.network.chat.Style.EMPTY.withItalic(false)));
         
-        // Add enchantment glint by adding an empty enchantment and hiding it
         chest.enchant(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING, 1);
-        chest.getOrCreateTag().putInt("HideFlags", 1); // Hide enchantments
+        chest.getOrCreateTag().putInt("HideFlags", 1);
 
-        // Add lore
         net.minecraft.nbt.CompoundTag display = chest.getOrCreateTagElement("display");
         net.minecraft.nbt.ListTag lore = new net.minecraft.nbt.ListTag();
         lore.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.network.chat.Component.Serializer.toJson(Component.literal("§7Contains backed up items for " + targetName).withStyle(net.minecraft.network.chat.Style.EMPTY.withItalic(false)))));
@@ -190,7 +261,8 @@ public class BackupViewMenuProvider implements MenuProvider {
         
         int slot = 0;
         
-        java.util.List<ItemStack> itemsToBundle = isEnderChest ? snapshot.enderChest : snapshot.mainInventory;
+        java.util.List<ItemStack> itemsToBundle = viewType == ViewType.ENDER_CHEST ? snapshot.enderChest : 
+                                                  (viewType == ViewType.CURIOS ? snapshot.curios : snapshot.mainInventory);
         
         for (ItemStack item : itemsToBundle) {
             if (!item.isEmpty()) {
@@ -200,7 +272,7 @@ public class BackupViewMenuProvider implements MenuProvider {
                 itemsList.add(itemTag);
             }
             slot++;
-            if (slot >= 27) break; // Chest only has 27 slots
+            if (slot >= 27) break;
         }
         blockEntityTag.put("Items", itemsList);
         blockEntityTag.putString("id", "minecraft:chest");

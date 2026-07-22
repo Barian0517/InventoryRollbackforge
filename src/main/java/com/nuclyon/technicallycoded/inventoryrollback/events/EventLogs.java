@@ -10,6 +10,9 @@ import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.ModList;
+import top.theillusivec4.curios.api.CuriosApi;
+import net.minecraftforge.items.IItemHandlerModifiable;
 
 @Mod.EventBusSubscriber(modid = "inventoryrollbackplus", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class EventLogs {
@@ -70,6 +73,17 @@ public class EventLogs {
             enderChest.set(i, player.getEnderChestInventory().getItem(i).copy());
         }
 
+        // Copy Curios if loaded
+        NonNullList<ItemStack> curiosList = NonNullList.create();
+        if (ModList.get().isLoaded("curios")) {
+            CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
+                IItemHandlerModifiable equipped = handler.getEquippedCurios();
+                for (int i = 0; i < equipped.getSlots(); i++) {
+                    curiosList.add(equipped.getStackInSlot(i).copy());
+                }
+            });
+        }
+
         String dimension = player.level().dimension().location().toString();
 
         PlayerDataSnapshot snapshot = new PlayerDataSnapshot(
@@ -85,6 +99,7 @@ public class EventLogs {
                 armor,
                 offhand,
                 enderChest,
+                curiosList,
                 logType,
                 timestamp,
                 deathReason

@@ -78,7 +78,7 @@ public class BackupMenuProvider implements MenuProvider {
                     PlayerDataSnapshot selectedBackup = backups.get(slotId);
                     if (player instanceof ServerPlayer serverPlayer) {
                         com.nuclyon.technicallycoded.inventoryrollback.InventoryRollbackPlus.LOGGER.info("Opening BackupViewMenuProvider for backup at " + selectedBackup.timestamp);
-                        serverPlayer.openMenu(new BackupViewMenuProvider(selectedBackup, targetUUID, targetName, false, () -> {
+                        serverPlayer.openMenu(new BackupViewMenuProvider(selectedBackup, targetUUID, targetName, BackupViewMenuProvider.ViewType.MAIN, 0, () -> {
                             openMenu(serverPlayer, targetUUID, targetName);
                         }));
                     }
